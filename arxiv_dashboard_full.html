@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>arXiv 全量论文元数据多维度分析仪表盘（308万篇 · 1986-2026）</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{
+    --bg-deep:#0d1b2a;--bg-card:#13284a;--bg-card2:#0f2138;
+    --cyan:#00d4ff;--blue:#5B8FF9;--orange:#FF9845;--purple:#945FB9;
+    --green:#5AD8A6;--red:#E86452;--yellow:#F6BD16;--pink:#FF99C3;
+    --text-main:#e0e6ed;--text-sub:#8aa0b8;--border:#1e3a5f;
+  }
+  body{
+    background:var(--bg-deep);color:var(--text-main);
+    font-family:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+    min-height:100vh;
+  }
+  .dashboard{max-width:1600px;margin:0 auto;padding:16px;}
+
+  /* Header */
+  .header{
+    text-align:center;padding:28px 16px 20px;
+    background:linear-gradient(135deg,#0d1b2a 0%,#13284a 50%,#0d1b2a 100%);
+    border:1px solid var(--border);border-radius:12px;margin-bottom:16px;
+    position:relative;overflow:hidden;
+  }
+  .header::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,var(--cyan),var(--blue),var(--purple),var(--orange));
+  }
+  .header h1{
+    font-size:1.7rem;font-weight:700;
+    background:linear-gradient(90deg,var(--cyan),var(--blue),var(--purple));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;margin-bottom:6px;
+  }
+  .header .subtitle{color:var(--text-sub);font-size:0.85rem;}
+
+  /* KPI Cards */
+  .kpi-row{
+    display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;
+  }
+  .kpi-card{
+    background:linear-gradient(145deg,var(--bg-card),var(--bg-card2));
+    border:1px solid var(--border);border-radius:10px;padding:16px 12px;
+    text-align:center;position:relative;overflow:hidden;
+    transition:transform .2s,border-color .2s;
+  }
+  .kpi-card:hover{transform:translateY(-3px);border-color:var(--cyan);}
+  .kpi-card::after{
+    content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+    background:var(--accent,var(--cyan));opacity:.7;
+  }
+  .kpi-icon{font-size:1.4rem;margin-bottom:6px;}
+  .kpi-value{font-size:1.5rem;font-weight:700;color:var(--accent,var(--cyan));}
+  .kpi-label{font-size:0.72rem;color:var(--text-sub);margin-top:4px;line-height:1.3;}
+
+  /* Chart Grid */
+  .chart-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+  }
+  .chart-card{
+    background:linear-gradient(145deg,var(--bg-card),var(--bg-card2));
+    border:1px solid var(--border);border-radius:10px;padding:14px;
+    display:flex;flex-direction:column;
+  }
+  .chart-card.full{grid-column:span 3;}
+  .chart-card.two-thirds{grid-column:span 2;}
+  .chart-card h3{
+    font-size:0.92rem;font-weight:600;color:var(--cyan);margin-bottom:8px;
+    padding-bottom:6px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:6px;
+  }
+  .chart-card h3 .tag{
+    font-size:0.65rem;background:rgba(0,212,255,.15);color:var(--cyan);
+    padding:1px 6px;border-radius:4px;font-weight:400;
+  }
+  .chart-body{flex:1;min-height:280px;}
+
+  /* Section divider */
+  .section-title{
+    grid-column:span 3;font-size:1.05rem;font-weight:600;
+    color:var(--orange);padding:8px 0 4px;border-bottom:1px solid var(--border);
+    margin-top:8px;display:flex;align-items:center;gap:8px;
+  }
+  .section-title .num{
+    background:var(--orange);color:#0d1b2a;width:22px;height:22px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:0.8rem;font-weight:700;
+  }
+
+  /* Footer */
+  .footer{
+    margin-top:16px;padding:18px;background:var(--bg-card);
+    border:1px solid var(--border);border-radius:10px;
+  }
+  .footer h4{color:var(--yellow);font-size:0.9rem;margin-bottom:8px;}
+  .footer p{color:var(--text-sub);font-size:0.78rem;line-height:1.7;}
+  .footer ul{list-style:none;padding-left:0;}
+  .footer li{color:var(--text-sub);font-size:0.78rem;line-height:1.8;padding-left:14px;position:relative;}
+  .footer li::before{content:'▸';color:var(--cyan);position:absolute;left:0;}
+
+  /* Stat mini-cards inside charts */
+  .mini-stats{display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap;}
+  .mini-stat{
+    background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);
+    border-radius:6px;padding:6px 12px;flex:1;min-width:80px;text-align:center;
+  }
+  .mini-stat .val{font-size:1.1rem;font-weight:700;color:var(--cyan);}
+  .mini-stat .lbl{font-size:0.68rem;color:var(--text-sub);}
+
+  /* Responsive */
+  @media(max-width:1200px){
+    .kpi-row{grid-template-columns:repeat(3,1fr);}
+    .chart-grid{grid-template-columns:repeat(2,1fr);}
+    .chart-card.full,.chart-card.two-thirds,.section-title{grid-column:span 2;}
+  }
+  @media(max-width:768px){
+    .kpi-row{grid-template-columns:repeat(2,1fr);}
+    .chart-grid{grid-template-columns:1fr;}
+    .chart-card.full,.chart-card.two-thirds,.section-title{grid-column:span 1;}
+    .header h1{font-size:1.2rem;}
+  }
+</style>
+</head>
+<body>
+<div class="dashboard">
+
+  <!-- ========== HEADER ========== -->
+  <div class="header">
+    <h1>arXiv 全量论文元数据多维度分析仪表盘</h1>
+    <div class="subtitle">308 万篇论文 · 40 年历史（1986-2026）· 17 维度深度可视化</div>
+  </div>
+
+  <!-- ========== KPI CARDS ========== -->
+  <div class="kpi-row">
+    <div class="kpi-card" style="--accent:#00d4ff;">
+      <div class="kpi-icon">📄</div>
+      <div class="kpi-value">3,087,072</div>
+      <div class="kpi-label">总论文数</div>
+    </div>
+    <div class="kpi-card" style="--accent:#5AD8A6;">
+      <div class="kpi-icon">📊</div>
+      <div class="kpi-value">46.27%</div>
+      <div class="kpi-label">整体发表率</div>
+    </div>
+    <div class="kpi-card" style="--accent:#5B8FF9;">
+      <div class="kpi-icon">📅</div>
+      <div class="kpi-value">40.2 年</div>
+      <div class="kpi-label">时间跨度（1986-2026）</div>
+    </div>
+    <div class="kpi-card" style="--accent:#FF9845;">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-value">4.75</div>
+      <div class="kpi-label">平均作者数</div>
+    </div>
+    <div class="kpi-card" style="--accent:#945FB9;">
+      <div class="kpi-icon">🔗</div>
+      <div class="kpi-value">48.27%</div>
+      <div class="kpi-label">跨学科论文比例</div>
+    </div>
+    <div class="kpi-card" style="--accent:#F6BD16;">
+      <div class="kpi-icon">📈</div>
+      <div class="kpi-value">9.1%</div>
+      <div class="kpi-label">年均增长率</div>
+    </div>
+  </div>
+
+  <!-- ========== CHART GRID ========== -->
+  <div class="chart-grid">
+
+    <!-- Section 1: 趋势与增长 -->
+    <div class="section-title"><span class="num">1</span> 增长趋势与发表状态</div>
+
+    <!-- Chart 2: 四十年提交趋势 -->
+    <div class="chart-card full">
+      <h3>四十年提交量趋势（1986-2026） <span class="tag">折线+面积图 · DataZoom</span></h3>
+      <div class="chart-body" id="chart-trend"></div>
+    </div>
+
+    <!-- Chart 3: 发表状态总览 -->
+    <div class="chart-card">
+      <h3>发表状态总览 <span class="tag">环形图</span></h3>
+      <div class="chart-body" id="chart-pub-status"></div>
+    </div>
+
+    <!-- Chart 4: 提交与发表时序 -->
+    <div class="chart-card">
+      <h3>提交与发表时序分析 <span class="tag">核心 · 环形图</span></h3>
+      <div class="chart-body" id="chart-pub-timing"></div>
+    </div>
+
+    <!-- Chart 5: 年度发表率趋势 -->
+    <div class="chart-card">
+      <h3>年度发表率趋势 <span class="tag">双Y轴 · 生存偏差</span></h3>
+      <div class="chart-body" id="chart-pub-rate-year"></div>
+    </div>
+
+    <!-- Chart 6: 发表时间差分布 -->
+    <div class="chart-card">
+      <h3>发表时间差分布 <span class="tag">柱状图</span></h3>
+      <div class="chart-body" id="chart-pub-lag"></div>
+    </div>
+
+    <!-- Section 2: 学科分布 -->
+    <div class="section-title"><span class="num">2</span> 学科分布与跨学科分析</div>
+
+    <!-- Chart 7: 学科大类分布 -->
+    <div class="chart-card">
+      <h3>学科大类分布 <span class="tag">散点映射发表率</span></h3>
+      <div class="chart-body" id="chart-broad-cat"></div>
+    </div>
+
+    <!-- Chart 8: Top 15 主分类 -->
+    <div class="chart-card two-thirds">
+      <h3>Top 15 主分类（按论文数排序） <span class="tag">颜色区分发表率</span></h3>
+      <div class="chart-body" id="chart-top-cat"></div>
+    </div>
+
+    <!-- Chart 9: 跨学科分析 -->
+    <div class="chart-card">
+      <h3>跨学科分析 <span class="tag">玫瑰图 + 统计</span></h3>
+      <div class="chart-body" id="chart-interdisciplinary"></div>
+    </div>
+
+    <!-- Section 3: 作者合作 -->
+    <div class="section-title"><span class="num">3</span> 作者合作模式</div>
+
+    <!-- Chart 10: 作者合作模式 -->
+    <div class="chart-card">
+      <h3>作者数分桶分布 <span class="tag">环形图</span></h3>
+      <div class="chart-body" id="chart-author-bucket"></div>
+    </div>
+
+    <!-- Chart 10b: 作者趋势 -->
+    <div class="chart-card">
+      <h3>40年平均作者数变化 <span class="tag">折线图</span></h3>
+      <div class="chart-body" id="chart-author-trend"></div>
+    </div>
+
+    <!-- Chart 11: 团队规模与发表率 -->
+    <div class="chart-card">
+      <h3>团队规模与发表率 <span class="tag">柱状+折线</span></h3>
+      <div class="chart-body" id="chart-team-publish"></div>
+    </div>
+
+    <!-- Section 4: 版本与摘要 -->
+    <div class="section-title"><span class="num">4</span> 版本更新与内容演变</div>
+
+    <!-- Chart 12: 版本更新分析 -->
+    <div class="chart-card">
+      <h3>版本数分布与发表率 <span class="tag">柱状+折线</span></h3>
+      <div class="chart-body" id="chart-version"></div>
+    </div>
+
+    <!-- Chart 13: 摘要长度演变 -->
+    <div class="chart-card two-thirds">
+      <h3>摘要长度历时演变（1990-2026） <span class="tag">折线图 · 翻倍增长</span></h3>
+      <div class="chart-body" id="chart-abstract"></div>
+    </div>
+
+    <!-- Section 5: 发表率对比与季节性 -->
+    <div class="section-title"><span class="num">5</span> 发表率对比 · 季节性 · 预测</div>
+
+    <!-- Chart 14: 学科发表率对比 -->
+    <div class="chart-card full">
+      <h3>学科发表率对比（Top 10 最高 vs Bottom 10 最低） <span class="tag">双向水平柱状图</span></h3>
+      <div class="chart-body" id="chart-cat-publish-rate"></div>
+    </div>
+
+    <!-- Chart 15: 月度季节性指数 -->
+    <div class="chart-card">
+      <h3>月度季节性指数 <span class="tag">旺季 > 1.0</span></h3>
+      <div class="chart-body" id="chart-seasonality"></div>
+    </div>
+
+    <!-- Chart 16: 增长预测 -->
+    <div class="chart-card">
+      <h3>增长预测（指数模型） <span class="tag">历史+预测</span></h3>
+      <div class="chart-body" id="chart-growth-predict"></div>
+    </div>
+
+    <!-- Chart 17: License分布 -->
+    <div class="chart-card">
+      <h3>License 分布 <span class="tag">饼图</span></h3>
+      <div class="chart-body" id="chart-license"></div>
+    </div>
+
+  </div><!-- /chart-grid -->
+
+  <!-- ========== FOOTER ========== -->
+  <div class="footer">
+    <h4>⚠ 数据局限与说明</h4>
+    <ul>
+      <li><strong>生存偏差（Survivorship Bias）</strong>：近 年论文（2023-2026）发表率骤降并非真实下降，而是这些论文尚未经历完整的期刊发表周期。2010 年发表率 67.2% → 2020 年 45.7% → 2025 年 18.1% → 2026 年 7.5% 的下降趋势主要受此偏差驱动。</li>
+      <li><strong>发表率定义</strong>：本文发表率基于 journal-ref 字段非空判定。由于 journal-ref 填写率为 30.84%，实际发表率可能被低估。DOI 字段非空率为 42.66%，可作为补充参考。</li>
+      <li><strong>journal-ref 解析局限</strong>：发表年份从 journal-ref 文本中正则提取，存在解析失败（NaN）的情况，约 481,319 篇已发表论文无法确定精确发表时间差。</li>
+      <li><strong>数据范围</strong>：数据截至 2026-06-25，2026 年数据仅覆盖上半年（164,104 篇），不代表全年水平。指数模型预测 2026 全年约 295K 篇。</li>
+      <li><strong>作者统计</strong>：作者数基于 authors_parsed 字段解析，样本量 61,750（抽样统计）。最大作者团队 3,435 人（Gemini 2.5 论文）。</li>
+      <li><strong>分类体系</strong>：primary_category 基于 arXiv 分类体系，大类映射为近似分组。"Other" 包含无法归类的交叉学科。</li>
+    </ul>
+    <p style="margin-top:10px;color:#5a7090;font-size:0.72rem;">数据来源：Kaggle arXiv Dataset（内部镜像） | 分析引擎：智数分析专家团 · 数据分析引擎 | 可视化：ECharts 5.4.3 | 生成时间：2026-07-05</p>
+  </div>
+
+</div><!-- /dashboard -->
+
+<script>
+// ==================== DATA ====================
+const D = {
+  by_year: [
+    {year:1986,count:1},{year:1988,count:1},{year:1989,count:6},{year:1990,count:26},
+    {year:1991,count:353},{year:1992,count:3190},{year:1993,count:6729},{year:1994,count:10078},
+    {year:1995,count:13006},{year:1996,count:15872},{year:1997,count:19610},{year:1998,count:24172},
+    {year:1999,count:27709},{year:2000,count:30681},{year:2001,count:33150},{year:2002,count:36116},
+    {year:2003,count:39402},{year:2004,count:43715},{year:2005,count:46885},{year:2006,count:50320},
+    {year:2007,count:55755},{year:2008,count:58810},{year:2009,count:64071},{year:2010,count:70288},
+    {year:2011,count:76602},{year:2012,count:84374},{year:2013,count:92875},{year:2014,count:97590},
+    {year:2015,count:105130},{year:2016,count:113440},{year:2017,count:123781},{year:2018,count:140377},
+    {year:2019,count:155917},{year:2020,count:178275},{year:2021,count:181599},{year:2022,count:185987},
+    {year:2023,count:209223},{year:2024,count:243690},{year:2025,count:284162},{year:2026,count:164104}
+  ],
+  publish_status: {published:1428505, unpublished:1658567, publish_rate:46.27},
+  publish_timing: {same_year:938368, after_submission:428261, before_submission:61876},
+  publish_by_year: [
+    {year:"1986",total:1,published:1,publish_rate:100.0},{year:"1988",total:1,published:1,publish_rate:100.0},
+    {year:"1989",total:6,published:2,publish_rate:33.33},{year:"1990",total:26,published:11,publish_rate:42.31},
+    {year:"1991",total:353,published:260,publish_rate:73.65},{year:"1992",total:3190,published:2536,publish_rate:79.5},
+    {year:"1993",total:6729,published:5068,publish_rate:75.32},{year:"1994",total:10078,published:7303,publish_rate:72.46},
+    {year:"1995",total:13006,published:9389,publish_rate:72.19},{year:"1996",total:15872,published:11388,publish_rate:71.75},
+    {year:"1997",total:19610,published:14142,publish_rate:72.12},{year:"1998",total:24172,published:16974,publish_rate:70.22},
+    {year:"1999",total:27709,published:19461,publish_rate:70.23},{year:"2000",total:30681,published:21744,publish_rate:70.87},
+    {year:"2001",total:33150,published:24333,publish_rate:73.4},{year:"2002",total:36116,published:26176,publish_rate:72.48},
+    {year:"2003",total:39402,published:28267,publish_rate:71.74},{year:"2004",total:43715,published:31361,publish_rate:71.74},
+    {year:"2005",total:46885,published:33666,publish_rate:71.81},{year:"2006",total:50320,published:35679,publish_rate:70.9},
+    {year:"2007",total:55755,published:38684,publish_rate:69.38},{year:"2008",total:58810,published:40673,publish_rate:69.16},
+    {year:"2009",total:64071,published:43472,publish_rate:67.85},{year:"2010",total:70288,published:47223,publish_rate:67.19},
+    {year:"2011",total:76602,published:49474,publish_rate:64.59},{year:"2012",total:84374,published:53018,publish_rate:62.84},
+    {year:"2013",total:92875,published:55634,publish_rate:59.9},{year:"2014",total:97590,published:57519,publish_rate:58.94},
+    {year:"2015",total:105130,published:58112,publish_rate:55.28},{year:"2016",total:113440,published:62986,publish_rate:55.52},
+    {year:"2017",total:123781,published:65022,publish_rate:52.53},{year:"2018",total:140377,published:71100,publish_rate:50.65},
+    {year:"2019",total:155917,published:74760,publish_rate:47.95},{year:"2020",total:178275,published:81544,publish_rate:45.74},
+    {year:"2021",total:181599,published:79175,publish_rate:43.6},{year:"2022",total:185987,published:74805,publish_rate:40.22},
+    {year:"2023",total:209223,published:63357,publish_rate:30.28},{year:"2024",total:243690,published:60323,publish_rate:24.75},
+    {year:"2025",total:284162,published:51521,publish_rate:18.13},{year:"2026",total:164104,published:12341,publish_rate:7.52}
+  ],
+  pub_lag: [
+    {lag:'提交前\n(预发表)',count:61876},{lag:'同年\n(0年)',count:457049},
+    {lag:'1年',count:334373},{lag:'2年',count:62429},{lag:'3年',count:19125},
+    {lag:'4年',count:6385},{lag:'5年',count:2485},{lag:'6-10年',count:2407},{lag:'10+年',count:1057}
+  ],
+  broad_category: [
+    {category:'Physics',count:1476270,publish_rate:71.81},
+    {category:'Computer Science',count:779428,publish_rate:18.25},
+    {category:'Mathematics',count:620833,publish_rate:28.06},
+    {category:'Electrical Eng.',count:79285,publish_rate:21.66},
+    {category:'Statistics',count:63295,publish_rate:20.05},
+    {category:'Quantitative Bio',count:34487,publish_rate:37.14},
+    {category:'Quantitative Fin.',count:13292,publish_rate:25.28},
+    {category:'Economics',count:12025,publish_rate:14.85},
+    {category:'Other',count:8157,publish_rate:50.59}
+  ],
+  top_categories: [
+    {category:'cs.CV',count:153511,publish_rate:13.17},
+    {category:'hep-ph',count:143318,publish_rate:72.89},
+    {category:'cs.LG',count:138229,publish_rate:13.10},
+    {category:'quant-ph',count:132679,publish_rate:64.99},
+    {category:'hep-th',count:113467,publish_rate:76.67},
+    {category:'astro-ph',count:94246,publish_rate:78.98},
+    {category:'cs.CL',count:83838,publish_rate:11.22},
+    {category:'gr-qc',count:72086,publish_rate:74.70},
+    {category:'cond-mat.mtrl-sci',count:71493,publish_rate:64.71},
+    {category:'cond-mat.mes-hall',count:69764,publish_rate:79.73},
+    {category:'math.AP',count:58205,publish_rate:23.94},
+    {category:'astro-ph.GA',count:55295,publish_rate:78.91},
+    {category:'math.CO',count:53992,publish_rate:21.83},
+    {category:'cond-mat.str-el',count:52983,publish_rate:82.83},
+    {category:'astro-ph.SR',count:48559,publish_rate:80.25}
+  ],
+  interdisciplinary: {
+    avg_categories:1.735, multi_rate:48.27,
+    distribution:[
+      {n:'1个分类',count:1596849},{n:'2个分类',count:938274},
+      {n:'3个分类',count:381909},{n:'4个分类',count:124031},{n:'5+个分类',count:46009}
+    ]
+  },
+  author_buckets: [
+    {bucket:'1人(独著)',count:557947,publish_rate:40.51},
+    {bucket:'2-5人',count:2009597,publish_rate:47.42},
+    {bucket:'6-10人',count:393144,publish_rate:43.95},
+    {bucket:'11-50人',count:113542,publish_rate:59.25},
+    {bucket:'50+人',count:12842,publish_rate:73.17}
+  ],
+  author_trend: [
+    {year:"1986",avg:2.0},{year:"1988",avg:1.0},{year:"1989",avg:1.67},{year:"1990",avg:1.73},
+    {year:"1991",avg:1.86},{year:"1992",avg:2.09},{year:"1993",avg:2.10},{year:"1994",avg:2.17},
+    {year:"1995",avg:2.27},{year:"1996",avg:2.44},{year:"1997",avg:2.57},{year:"1998",avg:2.58},
+    {year:"1999",avg:2.69},{year:"2000",avg:2.78},{year:"2001",avg:2.85},{year:"2002",avg:2.80},
+    {year:"2003",avg:2.89},{year:"2004",avg:2.97},{year:"2005",avg:3.00},{year:"2006",avg:3.09},
+    {year:"2007",avg:3.10},{year:"2008",avg:3.27},{year:"2009",avg:3.41},{year:"2010",avg:3.85},
+    {year:"2011",avg:4.29},{year:"2012",avg:4.58},{year:"2013",avg:4.78},{year:"2014",avg:4.86},
+    {year:"2015",avg:4.75},{year:"2016",avg:4.93},{year:"2017",avg:4.92},{year:"2018",avg:4.81},
+    {year:"2019",avg:4.95},{year:"2020",avg:5.04},{year:"2021",avg:5.29},{year:"2022",avg:5.29},
+    {year:"2023",avg:5.35},{year:"2024",avg:5.54},{year:"2025",avg:5.95},{year:"2026",avg:5.63}
+  ],
+  version_dist: [
+    {ver:'v1',count:1861514,publish_rate:42.26},
+    {ver:'v2',count:826395,publish_rate:53.17},
+    {ver:'v3',count:271053,publish_rate:52.48},
+    {ver:'v4',count:82591,publish_rate:48.94},
+    {ver:'v5+',count:45519,publish_rate:43.53}
+  ],
+  abstract_trend: [
+    {year:"1986",words:25.0},{year:"1988",words:87.0},{year:"1989",words:66.7},{year:"1990",words:81.3},
+    {year:"1991",words:83.9},{year:"1992",words:92.4},{year:"1993",words:96.4},{year:"1994",words:100.4},
+    {year:"1995",words:103.6},{year:"1996",words:104.8},{year:"1997",words:107.3},{year:"1998",words:109.4},
+    {year:"1999",words:110.4},{year:"2000",words:111.5},{year:"2001",words:113.2},{year:"2002",words:113.0},
+    {year:"2003",words:114.9},{year:"2004",words:116.0},{year:"2005",words:117.9},{year:"2006",words:119.3},
+    {year:"2007",words:119.6},{year:"2008",words:122.0},{year:"2009",words:124.3},{year:"2010",words:127.8},
+    {year:"2011",words:129.4},{year:"2012",words:132.1},{year:"2013",words:133.3},{year:"2014",words:136.4},
+    {year:"2015",words:138.7},{year:"2016",words:141.4},{year:"2017",words:144.2},{year:"2018",words:147.6},
+    {year:"2019",words:150.0},{year:"2020",words:155.2},{year:"2021",words:157.9},{year:"2022",words:159.4},
+    {year:"2023",words:162.1},{year:"2024",words:163.9},{year:"2025",words:165.5},{year:"2026",words:170.0}
+  ],
+  cat_publish_top: [
+    {category:'cond-mat.quant-gas',count:15318,publish_rate:84.59},
+    {category:'cond-mat.str-el',count:52983,publish_rate:82.83},
+    {category:'cond-mat',count:11357,publish_rate:81.51},
+    {category:'astro-ph.CO',count:45203,publish_rate:81.13},
+    {category:'cond-mat.supr-con',count:34219,publish_rate:80.36},
+    {category:'astro-ph.SR',count:48559,publish_rate:80.25},
+    {category:'cond-mat.mes-hall',count:69764,publish_rate:79.73},
+    {category:'astro-ph',count:94246,publish_rate:78.98},
+    {category:'astro-ph.GA',count:55295,publish_rate:78.91},
+    {category:'nucl-th',count:35819,publish_rate:78.51}
+  ],
+  cat_publish_bottom: [
+    {category:'econ.EM',count:3780,publish_rate:9.60},
+    {category:'econ.TH',count:2820,publish_rate:10.00},
+    {category:'cs.CL',count:83838,publish_rate:11.22},
+    {category:'cs.DS',count:18366,publish_rate:12.59},
+    {category:'cs.LG',count:138229,publish_rate:13.10},
+    {category:'cs.CV',count:153511,publish_rate:13.17},
+    {category:'alg-geom',count:1209,publish_rate:13.81},
+    {category:'q-fin.MF',count:1920,publish_rate:14.43},
+    {category:'cs.GT',count:9496,publish_rate:14.68},
+    {category:'cs.AI',count:40931,publish_rate:15.43}
+  ],
+  seasonality: [
+    {month:'1月',count:237198,pct:7.68,index:0.922},
+    {month:'2月',count:243477,pct:7.89,index:0.946},
+    {month:'3月',count:277872,pct:9.00,index:1.080},
+    {month:'4月',count:257684,pct:8.35,index:1.002},
+    {month:'5月',count:283407,pct:9.18,index:1.102},
+    {month:'6月',count:271754,pct:8.80,index:1.056},
+    {month:'7月',count:246662,pct:7.99,index:0.959},
+    {month:'8月',count:225618,pct:7.31,index:0.877},
+    {month:'9月',count:253451,pct:8.21,index:0.985},
+    {month:'10月',count:277207,pct:8.98,index:1.078},
+    {month:'11月',count:259515,pct:8.41,index:1.009},
+    {month:'12月',count:253227,pct:8.20,index:0.984}
+  ],
+  license_dist: [
+    {license:'arXiv 非独占分发',count:1874112,pct:60.71},
+    {license:'CC BY 4.0',count:546133,pct:17.69},
+    {license:'未知/未声明',count:452804,pct:14.67},
+    {license:'CC BY-NC-ND 4.0',count:84673,pct:2.74},
+    {license:'CC BY-NC-SA 4.0',count:63077,pct:2.04},
+    {license:'CC BY-SA 4.0',count:29103,pct:0.94},
+    {license:'CC0 1.0 (公有领域)',count:20912,pct:0.68},
+    {license:'其他',count:15858,pct:0.51}
+  ],
+  prediction: [
+    {year:2026,predicted:295717},{year:2027,predicted:323891},{year:2028,predicted:354749}
+  ]
+};
+
+// ==================== COMMON THEME ====================
+const COLORS = ['#00d4ff','#5B8FF9','#5AD8A6','#F6BD16','#E86452','#945FB9','#FF9845','#FF99C3','#6DC8EC','#1E9493'];
+const darkTheme = {
+  textStyle:{color:'#8aa0b8'},
+  title:{textStyle:{color:'#e0e6ed'}},
+  legend:{textStyle:{color:'#8aa0b8'}},
+  tooltip:{
+    backgroundColor:'rgba(13,27,42,0.95)',borderColor:'#1e3a5f',
+    textStyle:{color:'#e0e6ed'},borderWidth:1
+  }
+};
+
+function init(id){return echarts.init(document.getElementById(id),'dark');}
+
+// ==================== CHART 2: 四十年提交趋势 ====================
+(function(){
+  const c = init('chart-trend');
+  const years = D.by_year.map(d=>d.year);
+  const counts = D.by_year.map(d=>d.count);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      return p[0].name+'年<br/>提交量：<b style="color:#00d4ff">'+p[0].value.toLocaleString()+'</b> 篇';
+    }},
+    legend:{...darkTheme.legend,data:['年度提交量'],top:5},
+    grid:{left:60,right:30,top:40,bottom:70},
+    xAxis:{type:'category',data:years,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:{type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    dataZoom:[
+      {type:'inside',start:0,end:100},
+      {type:'slider',start:0,end:100,height:20,bottom:10,borderColor:'#1e3a5f',fillerColor:'rgba(0,212,255,0.15)',textStyle:{color:'#8aa0b8'}}
+    ],
+    series:[{
+      name:'年度提交量',type:'line',smooth:true,symbol:'circle',symbolSize:5,
+      data:counts,
+      itemStyle:{color:'#00d4ff'},
+      lineStyle:{width:2.5,color:'#00d4ff'},
+      areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+        {offset:0,color:'rgba(0,212,255,0.4)'},{offset:1,color:'rgba(0,212,255,0.02)'}
+      ])},
+      markPoint:{
+        symbol:'pin',symbolSize:45,
+        data:[
+          {coord:[years.indexOf(2020),178275],value:'COVID-19\n+14.3%',itemStyle:{color:'#E86452'}},
+          {coord:[years.indexOf(1991),353],value:'arXiv\n兴起',itemStyle:{color:'#F6BD16'}},
+          {coord:[years.indexOf(2025),284162],value:'历史\n峰值',itemStyle:{color:'#5AD8A6'}}
+        ],
+        label:{fontSize:9,color:'#fff'}
+      },
+      markLine:{
+        symbol:'none',silent:true,
+        data:[{xAxis:2020,label:{formatter:'COVID-19',color:'#E86452'},lineStyle:{color:'#E86452',type:'dashed'}}]
+      }
+    }]
+  });
+})();
+
+// ==================== CHART 3: 发表状态总览 ====================
+(function(){
+  const c = init('chart-pub-status');
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'item',formatter:'{b}<br/>{c} 篇 ({d}%)'},
+    legend:{...darkTheme.legend,bottom:5,left:'center'},
+    series:[{
+      type:'pie',radius:['42%','68%'],center:['50%','45%'],
+      avoidLabelOverlap:true,
+      itemStyle:{borderColor:'#0d1b2a',borderWidth:2},
+      label:{show:true,color:'#e0e6ed',formatter:'{b}\n{d}%'},
+      labelLine:{lineStyle:{color:'#8aa0b8'}},
+      data:[
+        {value:1428505,name:'已发表',itemStyle:{color:'#5AD8A6'}},
+        {value:1658567,name:'未发表',itemStyle:{color:'#5B8FF9'}}
+      ]
+    }]
+  });
+})();
+
+// ==================== CHART 4: 提交与发表时序 ====================
+(function(){
+  const c = init('chart-pub-timing');
+  const t = D.publish_timing;
+  const total = t.same_year + t.after_submission + t.before_submission;
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'item',formatter:p=>{
+      const pct=(p.value/total*100).toFixed(1);
+      return p.name+'<br/>'+p.value.toLocaleString()+' 篇 ('+pct+'%)';
+    }},
+    legend:{...darkTheme.legend,bottom:5,left:'center'},
+    series:[{
+      type:'pie',radius:['38%','65%'],center:['50%','45%'],
+      roseType:'radius',
+      itemStyle:{borderColor:'#0d1b2a',borderWidth:2},
+      label:{color:'#e0e6ed',formatter:'{b}\n{d}%'},
+      labelLine:{lineStyle:{color:'#8aa0b8'}},
+      data:[
+        {value:t.same_year,name:'同年发表',itemStyle:{color:'#00d4ff'}},
+        {value:t.after_submission,name:'提交后发表',itemStyle:{color:'#FF9845'}},
+        {value:t.before_submission,name:'提交前发表',itemStyle:{color:'#945FB9'}}
+      ]
+    }]
+  });
+})();
+
+// ==================== CHART 5: 年度发表率趋势 ====================
+(function(){
+  const c = init('chart-pub-rate-year');
+  const data = D.publish_by_year.filter(d=>parseInt(d.year)>=1991);
+  const years = data.map(d=>d.year);
+  const totals = data.map(d=>d.total);
+  const rates = data.map(d=>d.publish_rate);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      let s=p[0].name+'年<br/>';
+      p.forEach(d=>{s+=d.marker+d.seriesName+': <b>'+d.value+'</b>'+(d.seriesName.includes('率')?'%':' 篇')+'<br/>';});
+      return s;
+    }},
+    legend:{...darkTheme.legend,top:5,data:['论文总量','发表率']},
+    grid:{left:55,right:55,top:40,bottom:35},
+    xAxis:{type:'category',data:years,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:[
+      {type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+      {type:'value',name:'发表率(%)',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8',formatter:'{value}%'},splitLine:{show:false}}
+    ],
+    series:[
+      {name:'论文总量',type:'bar',data:totals,itemStyle:{color:'rgba(91,143,249,0.6)',borderColor:'#5B8FF9',borderWidth:1}},
+      {name:'发表率',type:'line',yAxisIndex:1,smooth:true,data:rates,
+        itemStyle:{color:'#FF9845'},lineStyle:{width:2.5,color:'#FF9845'},
+        markArea:{silent:true,itemStyle:{color:'rgba(232,100,82,0.08)'},
+          data:[[{xAxis:'2022'},{xAxis:'2026'}]]
+        },
+        markPoint:{symbol:'pin',symbolSize:38,data:[
+          {coord:[years.indexOf('2010'),67.19],value:'67.2%',itemStyle:{color:'#5AD8A6'}},
+          {coord:[years.indexOf('2026'),7.52],value:'7.5%',itemStyle:{color:'#E86452'}}
+        ],label:{fontSize:9}},
+        markLine:{silent:true,symbol:'none',data:[{yAxis:50,label:{formatter:'50%基准线',color:'#8aa0b8'},lineStyle:{color:'#8aa0b8',type:'dashed'}}]}
+      }
+    ]
+  });
+})();
+
+// ==================== CHART 6: 发表时间差分布 ====================
+(function(){
+  const c = init('chart-pub-lag');
+  const lags = D.pub_lag.map(d=>d.lag);
+  const counts = D.pub_lag.map(d=>d.count);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>p[0].name.replace('\n',' ')+': <b>'+p[0].value.toLocaleString()+'</b> 篇'},
+    grid:{left:60,right:25,top:30,bottom:35},
+    xAxis:{type:'category',data:lags,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8',fontSize:10}},
+    yAxis:{type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    series:[{
+      type:'bar',data:counts,
+      itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+        {offset:0,color:'#00d4ff'},{offset:1,color:'rgba(0,212,255,0.3)'}
+      ]),borderRadius:[4,4,0,0]},
+      barWidth:'60%'
+    }]
+  });
+})();
+
+// ==================== CHART 7: 学科大类分布 ====================
+(function(){
+  const c = init('chart-broad-cat');
+  const cats = D.broad_category.map(d=>d.category).reverse();
+  const counts = D.broad_category.map(d=>d.count).reverse();
+  const rates = D.broad_category.map(d=>d.publish_rate).reverse();
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      const i=cats.indexOf(p[0].name);
+      return p[0].name+'<br/>论文数: <b>'+p[0].value.toLocaleString()+'</b> 篇<br/>发表率: <b style="color:#5AD8A6">'+rates[i]+'%</b>';
+    }},
+    grid:{left:100,right:60,top:20,bottom:30},
+    xAxis:{type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    yAxis:{type:'category',data:cats,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    series:[{
+      type:'bar',data:counts.map((v,i)=>({
+        value:v,
+        itemStyle:{color:rates[i]>50?'#5AD8A6':rates[i]>30?'#F6BD16':'#E86452'}
+      })),
+      barWidth:'55%',
+      label:{show:true,position:'right',color:'#8aa0b8',formatter:p=>{
+        const i=cats.indexOf(p.name);
+        return rates[i]+'%';
+      }}
+    }]
+  });
+})();
+
+// ==================== CHART 8: Top 15 主分类 ====================
+(function(){
+  const c = init('chart-top-cat');
+  const cats = D.top_categories.map(d=>d.category).reverse();
+  const counts = D.top_categories.map(d=>d.count).reverse();
+  const rates = D.top_categories.map(d=>d.publish_rate).reverse();
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      const i=cats.indexOf(p[0].name);
+      return p[0].name+'<br/>论文数: <b>'+p[0].value.toLocaleString()+'</b> 篇<br/>发表率: <b>'+rates[i]+'%</b>';
+    }},
+    grid:{left:90,right:70,top:20,bottom:30},
+    xAxis:{type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    yAxis:{type:'category',data:cats,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8',fontSize:11}},
+    series:[{
+      type:'bar',data:counts.map((v,i)=>({
+        value:v,
+        itemStyle:{color:rates[i]>60?'#5AD8A6':rates[i]>30?'#F6BD16':rates[i]>15?'#FF9845':'#E86452'}
+      })),
+      barWidth:'55%',
+      label:{show:true,position:'right',color:'#8aa0b8',formatter:p=>{
+        const i=cats.indexOf(p.name);return rates[i]+'%';
+      }}
+    }]
+  });
+})();
+
+// ==================== CHART 9: 跨学科分析 ====================
+(function(){
+  const c = init('chart-interdisciplinary');
+  const dist = D.interdisciplinary.distribution;
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'item',formatter:'{b}<br/>{c} 篇 ({d}%)'},
+    legend:{...darkTheme.legend,bottom:0,left:'center',itemWidth:10,itemHeight:10},
+    title:{text:'平均 '+D.interdisciplinary.avg_categories+' 个分类',subtext:'多学科比例 '+D.interdisciplinary.multi_rate+'%',top:5,left:'center',textStyle:{color:'#00d4ff',fontSize:13},subtextStyle:{color:'#5AD8A6',fontSize:11}},
+    series:[{
+      type:'pie',radius:['20%','62%'],center:['50%','52%'],
+      roseType:'area',
+      itemStyle:{borderColor:'#0d1b2a',borderWidth:2},
+      label:{color:'#e0e6ed',formatter:'{b}\n{d}%',fontSize:10},
+      labelLine:{lineStyle:{color:'#8aa0b8'}},
+      data:dist.map((d,i)=>({value:d.count,name:d.n,itemStyle:{color:COLORS[i]}}))
+    }]
+  });
+})();
+
+// ==================== CHART 10: 作者数分桶 ====================
+(function(){
+  const c = init('chart-author-bucket');
+  const buckets = D.author_buckets;
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'item',formatter:p=>{
+      const b=buckets[p.dataIndex];
+      return p.name+'<br/>论文数: <b>'+p.value.toLocaleString()+'</b> 篇<br/>发表率: <b style="color:#5AD8A6">'+b.publish_rate+'%</b>';
+    }},
+    legend:{...darkTheme.legend,bottom:0,left:'center',itemWidth:10,itemHeight:10,type:'scroll'},
+    series:[{
+      type:'pie',radius:['38%','66%'],center:['50%','46%'],
+      itemStyle:{borderColor:'#0d1b2a',borderWidth:2},
+      label:{color:'#e0e6ed',formatter:'{b}\n{d}%',fontSize:10},
+      labelLine:{lineStyle:{color:'#8aa0b8'}},
+      data:buckets.map((b,i)=>({value:b.count,name:b.bucket,itemStyle:{color:COLORS[i]}}))
+    }]
+  });
+})();
+
+// ==================== CHART 10b: 作者趋势 ====================
+(function(){
+  const c = init('chart-author-trend');
+  const data = D.author_trend.filter(d=>parseInt(d.year)>=1990);
+  const years = data.map(d=>d.year);
+  const avgs = data.map(d=>d.avg);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>p[0].name+'年<br/>平均作者数: <b style="color:#FF9845">'+p[0].value+'</b> 人'},
+    grid:{left:45,right:25,top:30,bottom:30},
+    xAxis:{type:'category',data:years,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:{type:'value',name:'人数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    series:[{
+      type:'line',smooth:true,data:avgs,symbol:'circle',symbolSize:4,
+      itemStyle:{color:'#FF9845'},lineStyle:{width:2.5,color:'#FF9845'},
+      areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+        {offset:0,color:'rgba(255,152,69,0.3)'},{offset:1,color:'rgba(255,152,69,0.02)'}
+      ])},
+      markPoint:{symbol:'pin',symbolSize:38,data:[
+        {coord:[years.indexOf('1990'),1.73],value:'1.73',itemStyle:{color:'#5B8FF9'}},
+        {coord:[years.indexOf('2025'),5.95],value:'5.95',itemStyle:{color:'#E86452'}}
+      ],label:{fontSize:9}}
+    }]
+  });
+})();
+
+// ==================== CHART 11: 团队规模与发表率 ====================
+(function(){
+  const c = init('chart-team-publish');
+  const buckets = D.author_buckets;
+  const labels = buckets.map(d=>d.bucket);
+  const counts = buckets.map(d=>d.count);
+  const rates = buckets.map(d=>d.publish_rate);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      let s=p[0].name+'<br/>';
+      p.forEach(d=>{s+=d.marker+d.seriesName+': <b>'+d.value+'</b>'+(d.seriesName.includes('率')?'%':' 篇')+'<br/>';});
+      return s;
+    }},
+    legend:{...darkTheme.legend,top:5,data:['论文数','发表率']},
+    grid:{left:55,right:55,top:40,bottom:30},
+    xAxis:{type:'category',data:labels,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8',fontSize:10}},
+    yAxis:[
+      {type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+      {type:'value',name:'发表率(%)',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8',formatter:'{value}%'},splitLine:{show:false}}
+    ],
+    series:[
+      {name:'论文数',type:'bar',data:counts,itemStyle:{color:'rgba(0,212,255,0.5)',borderColor:'#00d4ff',borderWidth:1},barWidth:'40%'},
+      {name:'发表率',type:'line',yAxisIndex:1,smooth:true,data:rates,
+        itemStyle:{color:'#5AD8A6'},lineStyle:{width:2.5,color:'#5AD8A6'},
+        label:{show:true,color:'#5AD8A6',formatter:'{c}%'}}
+    ]
+  });
+})();
+
+// ==================== CHART 12: 版本数分布 ====================
+(function(){
+  const c = init('chart-version');
+  const vers = D.version_dist.map(d=>d.ver);
+  const counts = D.version_dist.map(d=>d.count);
+  const rates = D.version_dist.map(d=>d.publish_rate);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      let s=p[0].name+'<br/>';
+      p.forEach(d=>{s+=d.marker+d.seriesName+': <b>'+d.value+'</b>'+(d.seriesName.includes('率')?'%':' 篇')+'<br/>';});
+      return s;
+    }},
+    legend:{...darkTheme.legend,top:5,data:['论文数','发表率']},
+    grid:{left:55,right:55,top:40,bottom:30},
+    xAxis:{type:'category',data:vers,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:[
+      {type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+      {type:'value',name:'发表率(%)',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8',formatter:'{value}%'},splitLine:{show:false},max:60}
+    ],
+    series:[
+      {name:'论文数',type:'bar',data:counts,
+        itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#945FB9'},{offset:1,color:'rgba(148,95,185,0.3)'}]),borderRadius:[4,4,0,0]},
+        barWidth:'45%'},
+      {name:'发表率',type:'line',yAxisIndex:1,smooth:true,data:rates,
+        itemStyle:{color:'#F6BD16'},lineStyle:{width:2.5,color:'#F6BD16'},
+        label:{show:true,color:'#F6BD16',formatter:'{c}%'}}
+    ]
+  });
+})();
+
+// ==================== CHART 13: 摘要长度演变 ====================
+(function(){
+  const c = init('chart-abstract');
+  const data = D.abstract_trend.filter(d=>parseInt(d.year)>=1990);
+  const years = data.map(d=>d.year);
+  const words = data.map(d=>d.words);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>p[0].name+'年<br/>平均摘要词数: <b style="color:#5AD8A6">'+p[0].value+'</b> 词'},
+    legend:{...darkTheme.legend,top:5,data:['平均摘要词数']},
+    grid:{left:50,right:30,top:40,bottom:30},
+    xAxis:{type:'category',data:years,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:{type:'value',name:'词数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}},max:180},
+    series:[{
+      name:'平均摘要词数',type:'line',smooth:true,data:words,symbol:'none',
+      itemStyle:{color:'#5AD8A6'},lineStyle:{width:2.5,color:'#5AD8A6'},
+      areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+        {offset:0,color:'rgba(90,216,166,0.35)'},{offset:1,color:'rgba(90,216,166,0.02)'}
+      ])},
+      markPoint:{symbol:'pin',symbolSize:38,data:[
+        {coord:[years.indexOf('1990'),81.3],value:'81词',itemStyle:{color:'#5B8FF9'}},
+        {coord:[years.indexOf('2026'),170.0],value:'170词',itemStyle:{color:'#E86452'}}
+      ],label:{fontSize:9}},
+      markLine:{silent:true,symbol:'none',data:[{yAxis:81.3,label:{formatter:'1990基准: 81词',color:'#5B8FF9'},lineStyle:{color:'#5B8FF9',type:'dashed'}}]}
+    }]
+  });
+})();
+
+// ==================== CHART 14: 学科发表率对比 ====================
+(function(){
+  const c = init('chart-cat-publish-rate');
+  const top = D.cat_publish_top;
+  const bottom = D.cat_publish_bottom;
+  const topCats = top.map(d=>d.category);
+  const topRates = top.map(d=>d.publish_rate);
+  const bottomCats = bottom.map(d=>'▼ '+d.category).reverse();
+  const bottomRates = bottom.map(d=>-d.publish_rate).reverse();
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      const v=Math.abs(p[0].value);
+      return p[0].name.replace('▼ ','')+'<br/>发表率: <b>'+v+'%</b><br/>论文数: <b>'+(top.find(d=>d.category===p[0].name.replace('▼ ',''))||bottom.find(d=>d.category===p[0].name.replace('▼ ',''))).count.toLocaleString()+'</b> 篇';
+    }},
+    grid:{left:120,right:120,top:30,bottom:30},
+    xAxis:{type:'value',name:'发表率(%)',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8',formatter:v=>Math.abs(v)+'%'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    yAxis:[
+      {type:'category',position:'left',data:bottomCats,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#E86452',fontSize:10}},
+      {type:'category',position:'right',data:topCats,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#5AD8A6',fontSize:10}}
+    ],
+    series:[
+      {name:'最低发表率',type:'bar',yAxisIndex:0,data:bottomRates,
+        itemStyle:{color:new echarts.graphic.LinearGradient(1,0,0,0,[{offset:0,color:'#E86452'},{offset:1,color:'rgba(232,100,82,0.3)'}]),borderRadius:[0,4,4,0]},
+        barWidth:'55%',
+        label:{show:true,position:'left',color:'#E86452',formatter:p=>Math.abs(p.value)+'%'}
+      },
+      {name:'最高发表率',type:'bar',yAxisIndex:1,data:topRates,
+        itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#5AD8A6'},{offset:1,color:'rgba(90,216,166,0.3)'}]),borderRadius:[0,4,4,0]},
+        barWidth:'55%',
+        label:{show:true,position:'right',color:'#5AD8A6',formatter:'{c}%'}
+      }
+    ]
+  });
+})();
+
+// ==================== CHART 15: 月度季节性指数 ====================
+(function(){
+  const c = init('chart-seasonality');
+  const months = D.seasonality.map(d=>d.month);
+  const indices = D.seasonality.map(d=>d.index);
+  const counts = D.seasonality.map(d=>d.count);
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      const i=p[0].dataIndex;
+      return months[i]+'<br/>季节指数: <b style="color:'+(indices[i]>1?'#E86452':'#5B8FF9')+'">'+indices[i]+'</b><br/>论文数: <b>'+counts[i].toLocaleString()+'</b> 篇';
+    }},
+    grid:{left:50,right:45,top:30,bottom:30},
+    xAxis:{type:'category',data:months,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:{type:'value',name:'季节指数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    series:[{
+      type:'bar',data:indices.map(v=>({
+        value:v,
+        itemStyle:{color:v>1.05?'#E86452':v>1?'#F6BD16':v>0.95?'#5B8FF9':'#6DC8EC',borderRadius:[4,4,0,0]}
+      })),
+      barWidth:'55%',
+      markLine:{silent:true,symbol:'none',data:[{yAxis:1,label:{formatter:'基准线 1.0',color:'#8aa0b8'},lineStyle:{color:'#8aa0b8',type:'dashed'}}]}
+    }]
+  });
+})();
+
+// ==================== CHART 16: 增长预测 ====================
+(function(){
+  const c = init('chart-growth-predict');
+  const histData = D.by_year.filter(d=>d.year>=1995);
+  const histYears = histData.map(d=>d.year);
+  const histCounts = histData.map(d=>d.count);
+  // Extend with prediction
+  const predYears = D.prediction.map(d=>d.year);
+  const predCounts = D.prediction.map(d=>d.predicted);
+  const allYears = [...histYears, ...predYears];
+  // Historical series (null for prediction years)
+  const histSeries = [...histCounts, ...predYears.map(()=>null)];
+  // Prediction series (null for historical except last point for connection)
+  const predSeries = [...histYears.map(()=>null), ...predCounts];
+  predSeries[histYears.length-1] = histCounts[histCounts.length-1]; // connect
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'axis',formatter:p=>{
+      let s=p[0].name+'年<br/>';
+      p.forEach(d=>{if(d.value!==null)s+=d.marker+d.seriesName+': <b>'+d.value.toLocaleString()+'</b> 篇<br/>';});
+      return s;
+    }},
+    legend:{...darkTheme.legend,top:5,data:['历史数据','预测数据']},
+    grid:{left:55,right:30,top:40,bottom:30},
+    xAxis:{type:'category',data:allYears,axisLine:{lineStyle:{color:'#1e3a5f'}},axisLabel:{color:'#8aa0b8'}},
+    yAxis:{type:'value',name:'论文数',nameTextStyle:{color:'#8aa0b8'},axisLabel:{color:'#8aa0b8'},splitLine:{lineStyle:{color:'rgba(30,58,95,0.3)'}}},
+    series:[
+      {name:'历史数据',type:'line',data:histSeries,symbol:'circle',symbolSize:4,
+        itemStyle:{color:'#00d4ff'},lineStyle:{width:2.5,color:'#00d4ff'},
+        areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+          {offset:0,color:'rgba(0,212,255,0.3)'},{offset:1,color:'rgba(0,212,255,0.02)'}
+        ])}
+      },
+      {name:'预测数据',type:'line',data:predSeries,symbol:'diamond',symbolSize:6,
+        itemStyle:{color:'#F6BD16'},lineStyle:{width:2.5,color:'#F6BD16',type:'dashed'},
+        markArea:{silent:true,itemStyle:{color:'rgba(246,189,22,0.06)'},data:[[{xAxis:2026}]]}
+      }
+    ]
+  });
+})();
+
+// ==================== CHART 17: License分布 ====================
+(function(){
+  const c = init('chart-license');
+  c.setOption({
+    ...darkTheme,
+    tooltip:{...darkTheme.tooltip,trigger:'item',formatter:'{b}<br/>{c} 篇 ({d}%)'},
+    legend:{...darkTheme.legend,bottom:0,left:'center',type:'scroll',itemWidth:10,itemHeight:10},
+    series:[{
+      type:'pie',radius:['35%','64%'],center:['50%','46%'],
+      itemStyle:{borderColor:'#0d1b2a',borderWidth:2},
+      label:{color:'#e0e6ed',formatter:'{b}\n{d}%',fontSize:9},
+      labelLine:{lineStyle:{color:'#8aa0b8'}},
+      data:D.license_dist.map((d,i)=>({value:d.count,name:d.license,itemStyle:{color:COLORS[i%COLORS.length]}}))
+    }]
+  });
+})();
+
+// ==================== RESIZE ====================
+window.addEventListener('resize',()=>{
+  document.querySelectorAll('.chart-body').forEach(el=>{
+    const inst = echarts.getInstanceByDom(el);
+    if(inst) inst.resize();
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+# arXiv_full_descrip_skills
+分析arXiv平台的全量数据，进行描述行统计，一眼掌握arXiv的整体情况
